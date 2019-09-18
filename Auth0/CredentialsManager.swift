@@ -96,9 +96,23 @@ public struct CredentialsManager {
             let data = self.storage.data(forKey: self.storeKey),
             let credentials = NSKeyedUnarchiver.unarchiveObject(with: data) as? Credentials,
             credentials.accessToken != nil,
-            let expiresIn = credentials.expiresIn
+            let expiresIn = validateToken(stringtoken: credentials.idToken!)
             else { return false }
         return expiresIn > Date() || credentials.refreshToken != nil
+    }
+    
+    public func validateToken(stringtoken: String) -> Date?{
+        var jwtExpired = Date()
+        let jwt = decode(jwt: stringtoken)
+        for item in jwt! {
+            if item.key == "exp" {
+                let xpt = item.value as! Int
+                let timeInterval = Double(xpt)
+                let myNSDate = Date(timeIntervalSince1970: timeInterval)
+                jwtExpired = myNSDate
+            }
+        }
+        return jwtExpired
     }
 
     /// Retrieve credentials from keychain and yield new credentials using refreshToken if accessToken has expired
@@ -145,7 +159,7 @@ public struct CredentialsManager {
             let data = self.storage.data(forKey: self.storeKey),
             let credentials = NSKeyedUnarchiver.unarchiveObject(with: data) as? Credentials
             else { return callback(.noCredentials, nil) }
-        guard let expiresIn = credentials.expiresIn else { return callback(.noCredentials, nil) }
+        guard let expiresIn = validateToken(stringtoken: credentials.idToken!) else { return callback(.noCredentials, nil) }
         guard expiresIn < Date() else { return callback(nil, credentials) }
         guard let refreshToken = credentials.refreshToken else { return callback(.noRefreshToken, nil) }
 
@@ -156,7 +170,7 @@ public struct CredentialsManager {
                                                  tokenType: credentials.tokenType,
                                                  idToken: credentials.idToken,
                                                  refreshToken: refreshToken,
-                                                 expiresIn: credentials.expiresIn,
+                                                 expiresIn: validateToken(stringtoken: credentials.idToken!),
                                                  scope: credentials.scope)
                 _ = self.store(credentials: newCredentials)
                 callback(nil, newCredentials)
